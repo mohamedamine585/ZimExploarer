@@ -69,26 +69,23 @@ public class ZimExplorerService {
 
 
 
-    private void connectToMailServer() {
-        try {
-            Properties properties = new Properties();
-            properties.put("mail.store.protocol", "pop3");
-            properties.put("mail.pop3s.host", pop3Host);
-            properties.put("mail.pop3s.port", pop3Port);
-            properties.put("mail.pop3.starttls.enable", "true"); // Ensure STARTTLS is off
-            properties.put("mail.pop3.ssl.enable", "true");
+    private void connectToMailServer() throws MessagingException {
+        closeConnection(); // Ensure old connections are closed first
 
-            Session session = Session.getDefaultInstance(properties);
-            store = session.getStore("pop3s");
-            store.connect(pop3Host, email, password);
+        Properties properties = new Properties();
+        properties.put("mail.store.protocol", "pop3");
+        properties.put("mail.pop3s.host", pop3Host);
+        properties.put("mail.pop3s.port", pop3Port);
+        properties.put("mail.pop3.starttls.enable", "true");
+        properties.put("mail.pop3.ssl.enable", "true");
 
-            inbox = store.getFolder("INBOX");
-            inbox.open(Folder.READ_ONLY);
-        } catch (Exception e) {
-            logger.error("POP3 CONNECTION ERROR! CHECK YOUR CREDENTIALS", e);
-        }
+        Session session = Session.getInstance(properties);
+        store = session.getStore("pop3s");
+        store.connect(pop3Host, email, password);
+
+        inbox = store.getFolder("INBOX");
+        inbox.open(Folder.READ_ONLY);
     }
-
 
     public void mailFetchScheduler() {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
@@ -104,48 +101,44 @@ public class ZimExplorerService {
         scheduledTask = taskScheduler.scheduleAtFixedRate(this::fetchEmails, cronRate);
     }
 
+    private void refreshInbox() throws MessagingException {
+        if (inbox != null && inbox.isOpen()) {
+            inbox.close(false);
+        }
+        if (store != null && store.isConnected()) {
+            inbox = store.getFolder("INBOX");
+            inbox.open(Folder.READ_ONLY);
+        } else {
+            connectToMailServer(); // Reconnect if store is disconnected
+        }
+    }
     public void fetchEmails() {
         if (isProcessing.getAndSet(true)) {
             return;
         }
 
         try {
-            if(store == null || !store.isConnected() || inbox == null || !inbox.isOpen()){
-                connectToMailServer();
-            }
-
-
-
+            connectToMailServer(); // Reconnect (old connections are closed first)
             Message[] messages = inbox.getMessages();
+
             for (int i = messages.length - 1; i >= 0; i--) {
                 try {
                     processEmail(messages[i]);
                 } catch (Exception e) {
-                    if(i == messages.length - 1 && e.getMessage().equals("Mail already processed")){
+                    if (e.getMessage().equals("Mail already processed") && i == messages.length - 1) {
                         logger.warn("No new mails to process");
-
-                    }else {
-                        logger.warn("Error Processing Email {}",e.getMessage());
-
+                    } else if(!e.getMessage().equals("Mail already processed")){
+                        logger.warn("Error Processing Email: {}", e.getMessage());
                     }
-                        isProcessing.set(false);
-                        return;
-
                 }
             }
-        } catch (Exception e) {
+        } catch (MessagingException e) {
             logger.error("Error fetching emails: {}", e.getMessage());
         } finally {
+            closeConnection(); // Always close connection after processing
             isProcessing.set(false);
         }
-        try {
-            inbox.fetch(inbox.getMessages(),new FetchProfile());
-
-        }catch (Exception e){
-            logger.error("Error fetching new mails");
-        }
     }
-
     @PreDestroy
     private void closeConnection() {
         try {
@@ -157,6 +150,9 @@ public class ZimExplorerService {
             }
         } catch (Exception e) {
             logger.error("Error closing connection: {}", e.getMessage());
+        } finally {
+            inbox = null;
+            store = null;
         }
     }
     private void processEmail(Message message) throws Exception {
@@ -308,6 +304,7 @@ public class ZimExplorerService {
                 fileName = numMessage + "_" + fileName;
                 emailAttachmentPaths.add(saveAttachment(fileName, bodyPart));
             }
+
         }
         return emailAttachmentPaths;
 
