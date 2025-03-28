@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile default="true" name="Default" enabled="true" />
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="swf-auth" />
+        <module name="SMI-ZimExplorer" />
+        <module name="discovery" />
+        <module name="swf-monitor" />
+        <module name="SWF-Bridge" />
+        <module name="swf-core" />
+        <module name="gateway" />
+      </profile>
+      <profile name="Annotation profile for swift_enhancer" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/unknown/lombok-unknown.jar" />
+        </processorPath>
+        <module name="swift_enhancer" />
+      </profile>
+    </annotationProcessing>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="SMI-ZimExplorer" options="-parameters" />
+      <module name="SWF-Bridge" options="-parameters" />
+      <module name="discovery" options="-parameters" />
+      <module name="gateway" options="-parameters" />
+      <module name="swf-auth" options="-parameters" />
+      <module name="swf-core" options="-parameters" />
+      <module name="swf-monitor" options="-parameters" />
+      <module name="swift_enhancer" options="-parameters" />
+    </option>
+  </component>
+</project>

@@ -12,6 +12,8 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Service;
 
 import javax.mail.*;
+import javax.mail.event.MessageCountListener;
+import javax.mail.internet.MimeMultipart;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,7 +46,9 @@ public class ZimExplorerService {
     private Folder inbox;
     private final AtomicBoolean isProcessing = new AtomicBoolean(false);
     private static final String INVALID_CHARACTERS_REGEX = "[<>:\"/|?*]";
-    Pattern pattern = Pattern.compile(INVALID_CHARACTERS_REGEX);
+    private static final Pattern pattern = Pattern.compile(INVALID_CHARACTERS_REGEX);
+    private static final Pattern NUMBER_MESSAGE_PATTERN = Pattern.compile("<NUMERO_MESSAGE>(.*?)</NUMERO_MESSAGE>");
+
     @Autowired
     public ZimExplorerService(IMailRepository iMailRepository, Environment env) {
         this.iMailRepository = iMailRepository;
@@ -106,13 +110,10 @@ public class ZimExplorerService {
         }
 
         try {
-            if (store == null || !store.isConnected()  || inbox == null || !inbox.isOpen()) {
+            if(store == null || !store.isConnected() || inbox == null || !inbox.isOpen()){
                 connectToMailServer();
             }
-            if(inbox == null || !inbox.isOpen()){
-                isProcessing.set(false);
-                return;
-            }
+
 
 
             Message[] messages = inbox.getMessages();
@@ -120,15 +121,28 @@ public class ZimExplorerService {
                 try {
                     processEmail(messages[i]);
                 } catch (Exception e) {
-                    if (!"Mail already processed".equals(e.getMessage()) ) {
-                        logger.error("Error processing email: {}", e.getMessage());
+                    if(i == messages.length - 1 && e.getMessage().equals("Mail already processed")){
+                        logger.warn("No new mails to process");
+
+                    }else {
+                        logger.warn("Error Processing Email {}",e.getMessage());
+
                     }
+                        isProcessing.set(false);
+                        return;
+
                 }
             }
         } catch (Exception e) {
             logger.error("Error fetching emails: {}", e.getMessage());
         } finally {
             isProcessing.set(false);
+        }
+        try {
+            inbox.fetch(inbox.getMessages(),new FetchProfile());
+
+        }catch (Exception e){
+            logger.error("Error fetching new mails");
         }
     }
 
@@ -148,13 +162,12 @@ public class ZimExplorerService {
     private void processEmail(Message message) throws Exception {
         String status = "STARTED";
         String messageId = "";
-        Path messageFolderPath = null ;
         try {
             messageId = extractMessageId(message);
 
 
-            IMail iMail = iMailRepository.findByMessageId(messageId) ;
-            if(iMail != null){
+            List<IMail> existingMails = iMailRepository.findByMessageId(messageId) ;
+            if(!existingMails.isEmpty()){
                 throw new Exception("Mail already processed");
 
             }
@@ -163,18 +176,37 @@ public class ZimExplorerService {
 
 
 
+            List<String> emailAttachmentPaths = new ArrayList<>();
             status = "PROCESSING";
             logStatus(status, messageId);
 
+
+            Object content = message.getContent();
             StringBuilder emailBody = new StringBuilder();
+
+            if (content instanceof MimeMultipart) {
+                MimeMultipart outerMultipart = (MimeMultipart) content;
+                Object innerContent = outerMultipart.getBodyPart(0).getContent();
+
+                if (innerContent instanceof MimeMultipart) {
+                    MimeMultipart innerMultipart = (MimeMultipart) innerContent;
+                    Object finalContent = innerMultipart.getBodyPart(0).getContent();
+
+                    emailBody.append(finalContent instanceof String ? (String) finalContent : finalContent.toString());
+                } else {
+                    emailBody.append(innerContent.toString());
+                }
+            } else {
+                emailBody.append(content.toString());
+            }
+
+            String finalOutput = emailBody.toString();
             if (message.isMimeType("text/plain")) {
                 emailBody.append(message.getContent().toString());
             } else if (message.isMimeType("multipart/*")) {
-                 messageFolderPath = Path.of(attachmentsPath, "email_" + messageId);
-                if (Files.isDirectory(messageFolderPath)) {
-                    throw new Exception("Mail already processed");
-                }
-                processMultipart((Multipart) message.getContent(), emailBody, messageFolderPath);
+
+
+                emailAttachmentPaths = processMultipart((Multipart) message.getContent(), emailBody);
             }
 
             String from = Arrays.stream(message.getFrom())
@@ -182,11 +214,11 @@ public class ZimExplorerService {
                     .map(f -> f.contains("<") ? f.substring(f.indexOf("<") + 1, f.indexOf(">")) : f)
                     .findFirst().orElse("");
 
-            iMail = new IMail();
+            IMail iMail = new IMail();
             iMail.setSender(from);
             iMail.setMessageId(messageId);
             iMail.setBody(emailBody.toString());
-            iMail.setAttachmentsPath(messageFolderPath != null ? messageFolderPath.toString() : "");
+            iMail.setAttachmentsPath("");
             // Handle potential null subject
             iMail.setSubject(message.getSubject() != null ?
                     message.getSubject() : "[No Subject]");
@@ -197,6 +229,24 @@ public class ZimExplorerService {
 
             }catch (Exception e){
                 throw new SQLException();
+            }
+            for(int i = 0 ; i < emailAttachmentPaths.size() ; i++){
+                iMail = new IMail();
+                iMail.setSender(from);
+                iMail.setMessageId(messageId);
+                iMail.setBody("");
+                iMail.setAttachmentsPath(emailAttachmentPaths.get(i));
+                // Handle potential null subject
+                iMail.setSubject(message.getSubject() != null ?
+                        message.getSubject() : "[No Subject]");
+
+                iMail.setReceivedAt(LocalDateTime.ofInstant(message.getSentDate().toInstant(), ZoneId.systemDefault()));
+                try {
+                    iMailRepository.save(iMail);
+
+                }catch (Exception e){
+                    throw new SQLException();
+                }
             }
             status = "COMPLETED";
 
@@ -225,40 +275,59 @@ public class ZimExplorerService {
         logger.info("{} | {} | ID: {}", icon, status, messageId);
     }
 
-    private void processMultipart(Multipart multipart, StringBuilder emailBody, Path messageFolderPath) throws MessagingException, IOException {
+    private List<String> processMultipart(Multipart multipart, StringBuilder emailBody) throws MessagingException, IOException {
+        List<String> emailAttachmentPaths = new ArrayList<>();
+
+
+        String numMessage = extractNumMessage(emailBody.toString());
         for (int i = 0; i < multipart.getCount(); i++) {
             BodyPart bodyPart = multipart.getBodyPart(i);
             if (bodyPart.isMimeType("text/plain")) {
                 emailBody.append(bodyPart.getContent().toString());
-            } else if (bodyPart.isMimeType("text/html")) {
-                Files.createDirectories(messageFolderPath);
-                saveHtmlContent(bodyPart, messageFolderPath);
+            }
+            else if (bodyPart.isMimeType("text/html")) {
+                String fileName = numMessage + "_" + UUID.randomUUID().toString() + ".html";
+                emailAttachmentPaths.add(saveHtmlContent(fileName,bodyPart));
             } else if (Part.ATTACHMENT.equalsIgnoreCase(bodyPart.getDisposition()) || bodyPart.getFileName() != null) {
-                Files.createDirectories(messageFolderPath);
-                saveAttachment(bodyPart.getFileName(), bodyPart, messageFolderPath);
+                String fileName =  bodyPart.getFileName();
+                Matcher matcher = pattern.matcher(fileName);
+
+                if(matcher.find()){
+
+                    StringBuilder extension = new StringBuilder();
+                    for(int idx = fileName.lastIndexOf(".") ; idx < fileName.length() ; idx++){
+                        Matcher matcher1 = pattern.matcher(extension.toString() + fileName.charAt(idx));
+                        if(matcher1.find()){
+                            break;
+                        }
+                        extension.append(fileName.charAt(idx));
+
+                    }
+                    fileName = UUID.randomUUID().toString() + extension;
+                }
+                fileName = numMessage + "_" + fileName;
+                emailAttachmentPaths.add(saveAttachment(fileName, bodyPart));
             }
         }
+        return emailAttachmentPaths;
+
     }
 
-    private void saveHtmlContent(BodyPart bodyPart, Path messageFolderPath) throws MessagingException, IOException {
-        String fileName = UUID.randomUUID().toString() + ".html";
-        saveFile(fileName, bodyPart, messageFolderPath);
+    private String saveHtmlContent(String fileName,BodyPart bodyPart) throws MessagingException, IOException {
+        return saveFile(fileName, bodyPart);
     }
 
-    private void saveAttachment(String fileName,BodyPart bodyPart, Path messageFolderPath) throws MessagingException, IOException {
+    private String saveAttachment(String fileName,BodyPart bodyPart) throws MessagingException, IOException {
 
 
-        saveFile(fileName,bodyPart, messageFolderPath);
+       return   saveFile(fileName,bodyPart);
     }
 
-    private void saveFile(String fileName, BodyPart bodyPart, Path messageFolderPath) throws MessagingException, IOException {
-        Matcher matcher = pattern.matcher(fileName);
+    private String saveFile(String fileName, BodyPart bodyPart) throws MessagingException, IOException {
 
-        if(matcher.find()){
-            fileName = UUID.randomUUID().toString();
-        }
-        Path filePath = messageFolderPath.resolve(fileName);
+        Path filePath = Path.of(attachmentsPath,fileName);
         Files.write(filePath, bodyPart.getInputStream().readAllBytes());
+        return filePath.toString();
     }
 
     private String extractMessageId(Message message) throws MessagingException {
@@ -268,4 +337,12 @@ public class ZimExplorerService {
                 .map(id -> id.contains("@") ? id.substring(0, id.indexOf("@")) : id)
                 .orElse(UUID.randomUUID().toString());
     }
+    private String extractNumMessage(String bodyContent) {
+        Matcher matcher = NUMBER_MESSAGE_PATTERN.matcher(bodyContent);
+        if (matcher.find()) {
+            return matcher.group(1).strip();
+        }
+        return "LU_" + UUID.randomUUID(); // Fallback if no number is found
+    }
+
 }

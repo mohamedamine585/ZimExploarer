@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/SWF-Auth" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/SWF-Bridge" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/SWF-Core" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/SWF-DISCOVERY" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/SWF-Enhancer" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/SWF-FE" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/SWF-GATEWAY" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/SWF-Monitor" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/swift-project" vcs="Git" />
+  </component>
+</project>

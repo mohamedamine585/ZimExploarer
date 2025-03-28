@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/SMI-ZimExplorer/SMI-ZimExplorer.iml" filepath="$PROJECT_DIR$/SMI-ZimExplorer/SMI-ZimExplorer.iml" />
+      <module fileurl="file://$PROJECT_DIR$/SWF-Bridge/SWF-Bridge.iml" filepath="$PROJECT_DIR$/SWF-Bridge/SWF-Bridge.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/smi.iml" filepath="$PROJECT_DIR$/.idea/smi.iml" />
+      <module fileurl="file://$PROJECT_DIR$/SWF-Core/swf-core.iml" filepath="$PROJECT_DIR$/SWF-Core/swf-core.iml" />
+    </modules>
+  </component>
+</project>
