@@ -73,9 +73,9 @@ public class ZimExplorerService {
         closeConnection(); // Ensure old connections are closed first
 
         Properties properties = new Properties();
-        properties.put("mail.store.protocol", "pop3");
-        properties.put("mail.pop3s.host", pop3Host);
-        properties.put("mail.pop3s.port", pop3Port);
+        properties.put("mail.store.protocol", "pop3s");
+        properties.put("mail.pop3.host", pop3Host);
+        properties.put("mail.pop3.port", pop3Port);
         properties.put("mail.pop3.starttls.enable", "true");
         properties.put("mail.pop3.ssl.enable", "true");
 
@@ -188,7 +188,10 @@ public class ZimExplorerService {
                     MimeMultipart innerMultipart = (MimeMultipart) innerContent;
                     Object finalContent = innerMultipart.getBodyPart(0).getContent();
 
-                    emailBody.append(finalContent instanceof String ? (String) finalContent : finalContent.toString());
+                    if(emailBody.isEmpty()){
+                        emailBody.append(finalContent instanceof String ? (String) finalContent : finalContent.toString());
+
+                    }
                 } else {
                     emailBody.append(innerContent.toString());
                 }
@@ -198,7 +201,9 @@ public class ZimExplorerService {
 
             String finalOutput = emailBody.toString();
             if (message.isMimeType("text/plain")) {
-                emailBody.append(message.getContent().toString());
+                if(emailBody.isEmpty()){
+                    emailBody.append(message.getContent().toString());
+                }
             } else if (message.isMimeType("multipart/*")) {
 
 
@@ -279,7 +284,10 @@ public class ZimExplorerService {
         for (int i = 0; i < multipart.getCount(); i++) {
             BodyPart bodyPart = multipart.getBodyPart(i);
             if (bodyPart.isMimeType("text/plain")) {
-                emailBody.append(bodyPart.getContent().toString());
+                if(emailBody.isEmpty()){
+                    emailBody.append(bodyPart.getContent().toString());
+
+                }
             }
             else if (bodyPart.isMimeType("text/html")) {
                 String fileName = numMessage + "_" + UUID.randomUUID().toString() + ".html";
