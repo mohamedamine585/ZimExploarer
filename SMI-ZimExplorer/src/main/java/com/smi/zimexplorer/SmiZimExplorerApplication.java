@@ -13,9 +13,6 @@ public class SmiZimExplorerApplication {
 		int requiredMajorVersion = 17; // Change this as needed
 		int runningVersion = Runtime.version().feature(); // Gets major version number
 
-		System.out.println(runningVersion);
-		System.out.flush();
-
 		if (runningVersion < requiredMajorVersion) {
 			System.err.println("Error: This application requires Java " + requiredMajorVersion + " but found " + runningVersion);
 			System.exit(1);
