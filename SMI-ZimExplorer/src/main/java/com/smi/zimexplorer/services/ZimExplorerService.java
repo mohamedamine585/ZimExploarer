@@ -94,20 +94,7 @@ public class ZimExplorerService {
         email = env.getProperty("mail.pop3.username");
         password = env.getProperty("mail.pop3.password");
         cronRate = Integer.parseInt(env.getProperty("cronRate", "60000")); // Default to 60s
-        String errLogFilePath = env.getProperty("errLog.path");
 
-        if(errLogFilePath != null){
-            errorLogFile =  new File(errLogFilePath);
-            if(!errorLogFile.exists()){
-                try {
-                    errorLogFile.createNewFile();
-
-                }catch (Exception e){
-                    logger.error("Cannot create err.log file in specified directory");
-                }
-            }
-
-        }
     }
 
 
