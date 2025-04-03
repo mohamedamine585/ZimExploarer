@@ -158,7 +158,6 @@ public class ZimExplorerService {
                     processEmail(messages[i]);
                 } catch (Exception e) {
                     if (e.getMessage().equals("Mail already processed") && i == messages.length - 1) {
-                        System.out.println("no new");
                         logger.warn("No new mails to process");
                     } else if(!e.getMessage().equals("Mail already processed")){
                         logger.error("Error Processing Email: {}", e.getMessage());
