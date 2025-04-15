@@ -101,21 +101,26 @@ public class ZimExplorerService {
 
 
     private void connectToMailServer() throws MessagingException {
-        closeConnection(); // Ensure old connections are closed first
+        try {
 
-        Properties properties = new Properties();
-        properties.put("mail.store.protocol", "pop3s");
-        properties.put("mail.pop3.host", pop3Host);
-        properties.put("mail.pop3.port", pop3Port);
-        properties.put("mail.pop3.starttls.enable", "true");
-        properties.put("mail.pop3.ssl.enable", "true");
+            Properties properties = new Properties();
+            properties.put("mail.store.protocol", "pop3s");
+            properties.put("mail.pop3.host", pop3Host);
+            properties.put("mail.pop3.port", pop3Port);
+            properties.put("mail.pop3.starttls.enable", "true");
+            properties.put("mail.pop3.ssl.enable", "true");
 
-        Session session = Session.getInstance(properties);
-        store = session.getStore("pop3s");
-        store.connect(pop3Host, email, password);
+            Session session = Session.getInstance(properties);
+            store = session.getStore("pop3s");
+            store.connect(pop3Host, email, password);
 
-        inbox = store.getFolder("INBOX");
-        inbox.open(Folder.READ_ONLY);
+            inbox = store.getFolder("INBOX");
+            inbox.open(Folder.READ_WRITE);
+        }catch (Exception e) {
+            System.out.println(e.getMessage());
+            logger.error("Error connecting to mail server: {}", e.getMessage());
+        }
+
     }
 
     public void mailFetchScheduler() {
@@ -145,18 +150,29 @@ public class ZimExplorerService {
     }
 
     public void fetchEmails() {
+
         if (isProcessing.getAndSet(true)) {
             return;
         }
 
+        boolean noFlaggedMessages = true;
         try {
+            logger.info("Lookup for new emails...");
             connectToMailServer(); // Reconnect (old connections are closed first)
             Message[] messages = inbox.getMessages();
 
+            logger.info("Processing {} messages", messages.length);
             for (int i = messages.length - 1; i >= 0; i--) {
                 try {
                     processEmail(messages[i]);
+                    messages[i].setFlag(Flags.Flag.DELETED,true);
+                    logger.info("Message {} is successfully flagged to be deleted from the inbox.",this.extractMessageId(messages[i]));
+
+                    noFlaggedMessages = false;
                 } catch (Exception e) {
+                    if(e instanceof SQLException){
+                        logger.error("Error in a database operation. Cause : {}", e.getMessage());
+                    }
                     if (e.getMessage().equals("Mail already processed") && i == messages.length - 1) {
                         logger.warn("No new mails to process");
                     } else if(!e.getMessage().equals("Mail already processed")){
@@ -167,8 +183,21 @@ public class ZimExplorerService {
         } catch (MessagingException e) {
             logger.error("Error fetching emails: {}", e.getMessage());
         } finally {
-            closeConnection(); // Always close connection after processing
+            closeInbox(!noFlaggedMessages);
             isProcessing.set(false);
+        }
+    }
+
+    private void closeInbox(boolean deleteFlaggedMessages){
+        try {
+           inbox.close(true);
+           if(deleteFlaggedMessages){
+               logger.info("Successfully deleted flagged messages.");
+
+           }
+        }catch (Exception e){
+            logger.error("Error closing inbox: {}", e.getMessage());
+
         }
     }
 
@@ -176,13 +205,15 @@ public class ZimExplorerService {
     private void closeConnection() {
         try {
             if (inbox != null && inbox.isOpen()) {
-                inbox.close(false);
+                inbox.close(true);
+                logger.info("Successfully deleted flagged messages.");
+
             }
             if (store != null && store.isConnected()) {
                 store.close();
             }
         } catch (Exception e) {
-            logger.error("Error closing connection: {}", e.getMessage());
+            logger.error("Error closing connection or inbox: {}", e.getMessage());
         } finally {
             inbox = null;
             store = null;
@@ -250,10 +281,12 @@ public class ZimExplorerService {
             try {
                 iMailRepository.save(iMail);
             } catch (Exception e) {
-                throw new SQLException();
+                throw new SQLException("Cannot save email body for messageID : " + messageId);
             }
 
+            System.out.println(emailAttachmentPaths.size());
             for (int i = 0; i < emailAttachmentPaths.size(); i++) {
+
                 iMail = new IMail();
                 iMail.setSender(from);
                 iMail.setMessageId(messageId);
@@ -264,13 +297,16 @@ public class ZimExplorerService {
                 try {
                     iMailRepository.save(iMail);
                 } catch (Exception e) {
-                    throw new SQLException();
+                    throw new SQLException("Cannot save email attachment file path : " + emailAttachmentPaths.get(i) +  " for messageID : " + messageId);
                 }
             }
             status = "COMPLETED";
 
-        } catch (SQLException e) {
-            return;
+        } catch (Exception e) {
+            if(e instanceof  SQLException){
+                throw new SQLException(e.getMessage());
+            }
+            throw e;
         } finally {
             logStatus(status, messageId);
         }
