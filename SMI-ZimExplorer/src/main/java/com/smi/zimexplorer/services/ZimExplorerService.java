@@ -386,35 +386,41 @@ public class ZimExplorerService {
 
     private List<String> processMultipart(Multipart multipart, StringBuilder emailBody,String basePath) throws MessagingException, IOException {
         List<String> emailAttachmentsPaths = new ArrayList<>();
+        String numMessage = extractNumMessage(emailBody.toString());
         for (int i = 0; i < multipart.getCount(); i++) {
             BodyPart bodyPart = multipart.getBodyPart(i);
             if (bodyPart.isMimeType("text/plain")) {
                 if(emailBody.isEmpty()){
                     emailBody.append(bodyPart.getContent().toString());
+                    if(numMessage.isEmpty() ){
+                            numMessage = extractNumMessage(emailBody.toString());
+                    }
 
                 }
             } else if (bodyPart.isMimeType("text/html")) {
 
-                emailAttachmentsPaths.add(saveHtmlContent(bodyPart,basePath));
+
+                emailAttachmentsPaths.add(saveHtmlContent(numMessage,bodyPart,basePath));
             } else if (Part.ATTACHMENT.equalsIgnoreCase(bodyPart.getDisposition()) || bodyPart.getFileName() != null) {
-                emailAttachmentsPaths.add(saveAttachment(bodyPart.getFileName(), bodyPart,basePath));
+                emailAttachmentsPaths.add(saveAttachment(bodyPart.getFileName()  , numMessage, bodyPart,basePath));
             }
         }
         return emailAttachmentsPaths;
     }
 
-    private String saveHtmlContent(BodyPart bodyPart,String basePath) throws MessagingException, IOException {
+
+    private String saveHtmlContent(String fileNamePrefix,BodyPart bodyPart,String basePath) throws MessagingException, IOException {
         String fileName = UUID.randomUUID().toString() + ".html";
-       return   saveFileWithBodyPart(fileName, bodyPart,basePath);
+       return   saveFileWithBodyPart(fileName, fileNamePrefix,bodyPart,basePath);
     }
 
-    private String saveAttachment(String fileName,BodyPart bodyPart,String basePath) throws MessagingException, IOException {
+    private String saveAttachment(String fileName,String fileNamePrefix,BodyPart bodyPart,String basePath) throws MessagingException, IOException {
 
 
-       return saveFileWithBodyPart(fileName,bodyPart,basePath);
+       return saveFileWithBodyPart(fileName,fileNamePrefix,bodyPart,basePath);
     }
 
-    private String saveFileWithBodyPart(String fileName, BodyPart bodyPart,String basePath) throws MessagingException, IOException {
+    private String saveFileWithBodyPart(String fileName,String fileNamePrefix, BodyPart bodyPart,String basePath) throws MessagingException, IOException {
         Matcher matcher = pattern.matcher(fileName);
 
         if(matcher.find()){
