@@ -410,17 +410,19 @@ public class ZimExplorerService {
 
 
     private String saveHtmlContent(String fileNamePrefix,BodyPart bodyPart,String basePath) throws MessagingException, IOException {
-        String fileName = UUID.randomUUID().toString() + ".html";
-       return   saveFileWithBodyPart(fileName, fileNamePrefix,bodyPart,basePath);
+        String fileName = fileNamePrefix + "_" + UUID.randomUUID() + ".html";
+
+       return   saveFileWithBodyPart(fileName,bodyPart,basePath);
     }
 
     private String saveAttachment(String fileName,String fileNamePrefix,BodyPart bodyPart,String basePath) throws MessagingException, IOException {
 
+         fileName = fileNamePrefix + "_" + fileName;
 
-       return saveFileWithBodyPart(fileName,fileNamePrefix,bodyPart,basePath);
+       return saveFileWithBodyPart(fileName,bodyPart,basePath);
     }
 
-    private String saveFileWithBodyPart(String fileName,String fileNamePrefix, BodyPart bodyPart,String basePath) throws MessagingException, IOException {
+    private String saveFileWithBodyPart(String fileName, BodyPart bodyPart,String basePath) throws MessagingException, IOException {
         Matcher matcher = pattern.matcher(fileName);
 
         if(matcher.find()){
