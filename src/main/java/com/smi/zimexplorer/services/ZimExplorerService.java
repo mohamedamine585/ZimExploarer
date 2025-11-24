@@ -52,6 +52,8 @@ public class ZimExplorerService {
     private static final String INVALID_CHARACTERS_REGEX = "[<>:\"/|?*]";
     private static final Pattern pattern = Pattern.compile(INVALID_CHARACTERS_REGEX);
     private static final Pattern NUMBER_MESSAGE_PATTERN = Pattern.compile("<NUMERO_MESSAGE>(.*?)</NUMERO_MESSAGE>");
+    Pattern extensionPattern = Pattern.compile("\\.[A-Za-z0-9]+");
+
     private File errorLogFile;
 
     @Autowired
@@ -410,24 +412,30 @@ public class ZimExplorerService {
 
 
     private String saveHtmlContent(String fileNamePrefix,BodyPart bodyPart,String basePath) throws MessagingException, IOException {
-        String fileName = fileNamePrefix + "_" + UUID.randomUUID() + ".html";
 
-       return   saveFileWithBodyPart(fileName,bodyPart,basePath);
+       return   saveFileWithBodyPart(UUID.randomUUID() + ".html",fileNamePrefix,bodyPart,basePath);
     }
 
     private String saveAttachment(String fileName,String fileNamePrefix,BodyPart bodyPart,String basePath) throws MessagingException, IOException {
 
-         fileName = fileNamePrefix + "_" + fileName;
 
-       return saveFileWithBodyPart(fileName,bodyPart,basePath);
+       return saveFileWithBodyPart(fileName,fileNamePrefix,bodyPart,basePath);
     }
 
-    private String saveFileWithBodyPart(String fileName, BodyPart bodyPart,String basePath) throws MessagingException, IOException {
+    private String saveFileWithBodyPart(String fileName,String fileNamePrefix, BodyPart bodyPart,String basePath) throws MessagingException, IOException {
         Matcher matcher = pattern.matcher(fileName);
+        Matcher extMatcher = extensionPattern.matcher(fileName);
+
+        String extension = "";
 
         if(matcher.find()){
-            fileName = UUID.randomUUID().toString();
+            fileName =  UUID.randomUUID().toString();
+            if(extMatcher.find()) {
+                extension = extMatcher.group(0);
+                fileName += extension;
+            }
         }
+        fileName = fileNamePrefix + "_" + fileName;
         Path messagesFolderPath =  Path.of(basePath);
         Path filePath = messagesFolderPath.resolve(fileName);
         Files.write(filePath, bodyPart.getInputStream().readAllBytes());
